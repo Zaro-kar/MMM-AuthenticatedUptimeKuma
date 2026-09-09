@@ -1,28 +1,61 @@
-.MMM-UptimeKuma table {
+/* Everything themeable is a CSS custom property, so it can be changed from
+   MagicMirror's css/custom.css without editing this file. Settings put into
+   config.js are written onto the element itself and win over custom.css. */
+.MMM-AuthenticatedUptimeKuma {
+    --uptimekuma-color-up: green;
+    --uptimekuma-color-down: red;
+    --uptimekuma-color-pending: orange;
+    --uptimekuma-color-maintenance: blue;
+    --uptimekuma-color-unknown: gray;
+}
+
+.MMM-AuthenticatedUptimeKuma .status-up {
+    color: var(--uptimekuma-color-up);
+}
+
+.MMM-AuthenticatedUptimeKuma .status-down {
+    color: var(--uptimekuma-color-down);
+}
+
+.MMM-AuthenticatedUptimeKuma .status-pending {
+    color: var(--uptimekuma-color-pending);
+}
+
+.MMM-AuthenticatedUptimeKuma .status-maintenance {
+    color: var(--uptimekuma-color-maintenance);
+}
+
+.MMM-AuthenticatedUptimeKuma .status-unknown {
+    color: var(--uptimekuma-color-unknown);
+}
+
+.MMM-AuthenticatedUptimeKuma table {
     width: 100%;
     border-collapse: collapse;
 }
 
-.MMM-UptimeKuma td {
+.MMM-AuthenticatedUptimeKuma td {
     padding: 10px;
 }
 
-.title{
+.MMM-AuthenticatedUptimeKuma .small td {
+    padding: 5px 10px;
+}
+
+.MMM-AuthenticatedUptimeKuma .title {
     text-align: left;
 }
 
-.circle-indicator {
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-.state-indicator {
+.MMM-AuthenticatedUptimeKuma .state-indicator {
     width: 20px;
     text-align: center;
 }
 
-.small td {
-    padding: 5px 10px;
+/* The status class sets the text color, the circle picks it up from there. */
+.MMM-AuthenticatedUptimeKuma .circle-indicator {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    display: inline-block;
+    background-color: currentColor;
 }

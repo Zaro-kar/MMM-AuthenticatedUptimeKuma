@@ -6,6 +6,16 @@ const STATUS_UP = 1;
 const STATUS_PENDING = 2;
 const STATUS_MAINTENANCE = 3;
 
+// Widget settings, and the CSS custom property each one sets.
+const WIDGET_STYLE_PROPERTIES = {
+    minWidth: "--uptimekuma-tile-min-width",
+    width: "--uptimekuma-tile-width",
+    height: "--uptimekuma-tile-height",
+};
+
+// Colors used to be configured here, they are styled in CSS now.
+const OBSOLETE_WIDGET_SETTINGS = ["titleColor", "backgroundColor", "descriptionColor"];
+
 Module.register("MMM-AuthenticatedUptimeKuma", {
     defaults: {
         url: "",
@@ -15,11 +25,13 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
         updateInterval: 60 * 1000,
         ignoreCertErrors: false,
         displayType: "list",
+        // Widget dimensions. Everything left at null keeps the value from
+        // MMM-AuthenticatedUptimeKumaWidget.css. Colors, transparency and the
+        // rest of the appearance are styled in css/custom.css.
         widgetSettings: {
-            titleColor: "black",
-            backgroundColor: "#FFFFFF",
-            descriptionColor: "#666",
-            minWidth: "200px",
+            minWidth: null,
+            width: null,
+            height: null,
         },
         monitors: []
     },
@@ -33,6 +45,12 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
 
         if (this.config.token) {
             Log.warn(`${this.name}: the token option is obsolete, this module now uses the Uptime Kuma API. Configure apiKey instead.`);
+        }
+
+        const obsoleteSettings = OBSOLETE_WIDGET_SETTINGS.filter((setting) => this.config.widgetSettings?.[setting] !== undefined);
+
+        if (obsoleteSettings.length > 0) {
+            Log.warn(`${this.name}: the widgetSettings ${obsoleteSettings.join(", ")} are obsolete, style the module in css/custom.css instead.`);
         }
 
         this.sendSocketNotification("CONFIG", {
@@ -173,6 +191,7 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
         // Create a container for the list of widgets
         var listContainer = document.createElement("div");
         listContainer.classList.add("widget-list-container");
+        this.applyWidgetSettings(listContainer);
 
         // Iterate through the configured monitors and create a widget for each
         this.config.monitors.forEach((monitorConfig) => {
@@ -181,26 +200,21 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
             // Create a widget container for each monitor
             var widgetContainer = document.createElement("div");
             widgetContainer.classList.add("monitor-widget");
-            widgetContainer.style.backgroundColor = this.config.widgetSettings.backgroundColor;
-            widgetContainer.style.minWidth = this.config.widgetSettings.minWidth;
 
             // Monitor name
             var nameDisplay = document.createElement("div");
             nameDisplay.classList.add("monitor-name");
             nameDisplay.innerHTML = monitorConfig.name ?? monitor?.name ?? "";
-            nameDisplay.style.color = this.config.widgetSettings.titleColor;
 
             // Monitor data
             var dataDisplay = document.createElement("div");
-            dataDisplay.classList.add("monitor-data");
+            dataDisplay.classList.add("monitor-data", this.getStatusClass(monitor));
             dataDisplay.innerHTML = this.getMonitorData(monitorConfig, monitor);
-            dataDisplay.style.color = this.getStatusColor(monitor);
 
             // Data display name
             var dataDisplayName = document.createElement("div");
             dataDisplayName.classList.add("monitor-data-name");
             dataDisplayName.innerHTML = this.getDataDisplayName(monitorConfig.display);
-            dataDisplayName.style.color = this.config.widgetSettings.descriptionColor;
 
             // Append elements to the widget container
             widgetContainer.appendChild(dataDisplayName);
@@ -217,28 +231,45 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
         return wrapper;
     },
 
-    // Map a monitor status onto its display color. Paused monitors drop out of
-    // /metrics entirely, so an unknown monitor is shown as gray.
-    getStatusColor: function (monitor) {
+    // Turn the configured widget dimensions into CSS custom properties.
+    // Settings left unset are not written at all, so the stylesheet default
+    // applies and css/custom.css stays free to override it.
+    applyWidgetSettings: function (element) {
+        // MagicMirror replaces the whole widgetSettings object when only part
+        // of it is configured, so fill the missing entries back in.
+        const settings = Object.assign({}, this.defaults.widgetSettings, this.config.widgetSettings);
+
+        for (const [setting, property] of Object.entries(WIDGET_STYLE_PROPERTIES)) {
+            const value = settings[setting];
+
+            if (value !== null && value !== undefined && value !== "") {
+                element.style.setProperty(property, String(value));
+            }
+        }
+    },
+
+    // Map a monitor status onto its display class, which carries the color.
+    // Paused monitors drop out of /metrics entirely, so an unknown monitor is
+    // shown as gray.
+    getStatusClass: function (monitor) {
         switch (monitor?.status) {
             case STATUS_UP:
-                return "green";
+                return "status-up";
             case STATUS_DOWN:
-                return "red";
+                return "status-down";
             case STATUS_PENDING:
-                return "orange";
+                return "status-pending";
             case STATUS_MAINTENANCE:
-                return "blue";
+                return "status-maintenance";
             default:
-                return "gray";
+                return "status-unknown";
         }
     },
 
     // Get the color-coded circle based on the status
     getStateIndicator: function (monitor) {
         var indicator = document.createElement("div");
-        indicator.classList.add("circle-indicator");
-        indicator.style.backgroundColor = this.getStatusColor(monitor);
+        indicator.classList.add("circle-indicator", this.getStatusClass(monitor));
 
         return indicator;
     },
@@ -287,13 +318,12 @@ Module.register("MMM-AuthenticatedUptimeKuma", {
     },
 
     getStyles: function () {
-        switch (this.config.displayType) {
-            case "list":
-                return ["MMM-AuthenticatedUptimeKuma.css"];
-            case "widget":
-                return ["MMM-AuthenticatedUptimeKumaWidget.css"];
-            default:
-                return [];
+        const styles = ["MMM-AuthenticatedUptimeKuma.css"];
+
+        if (this.config.displayType === "widget") {
+            styles.push("MMM-AuthenticatedUptimeKumaWidget.css");
         }
+
+        return styles;
     },
 });

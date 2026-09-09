@@ -54,10 +54,8 @@ To use this module, add the configuration to the modules array in `config/config
 		updateInterval: 60 * 1000,
 		displayType: "widget",
         widgetSettings: {
-			titleColor: "black",
-			backgroundColor: "#FFFFFF",
-			descriptionColor: "#666",
-			minWidth: "200px"
+			minWidth: "200px",
+			height: "100px"
 		},
 		monitors: [
     		{
@@ -88,11 +86,10 @@ To use this module, add the configuration to the modules array in `config/config
 | `updateInterval` | `60000` | How often the monitor data is fetched, in milliseconds. Values below `10000` are raised to `10000` to avoid hammering your instance. |
 | `ignoreCertErrors` | `false` | Set to `true` if your instance uses a self-signed certificate. |
 | `displayType` | `"list"` | This specifies how the module is shown. There are two valid options: `list`, `widget` |
-| `widgetSettings` | | In here there are all the settings which will be applied to the widget. If you only want to use the list, then you don't need to specify this option. |
-| `widgetSettings.titleColor` | `"black"` | The color of the Widget Titel. Any HTML color is allowed or an hex value. |
-| `widgetSettings.backgroundColor` | `"#FFFFFF"` | The background color of the widget. Any HTML color is allowed or an hex value. |
-| `widgetSettings.descriptionColor` | `"#666"` | This is the desciption color which let's you know what you are displaying. Any HTML color is allowed or an hex value. |
-| `widgetSettings.minWidth` | `200px` | The min with of the widget itself. Can be any CSS option for dimensions. |
+| `widgetSettings` | | The size of the widgets. Everything else about their appearance — colors, transparency, fonts, spacing — is styled in `custom.css`, see [Styling with custom.css](#styling-with-customcss). If you only want to use the list, then you don't need to specify this option. |
+| `widgetSettings.minWidth` | `200px` | The min with of the widget itself. Can be any CSS option for dimensions. A widget is never narrower than this, but it does grow past it to fill the space it has. |
+| `widgetSettings.width` | `auto` | A fixed width for the widget itself, e.g. `"300px"`. By default a widget fills the space it has, down to `minWidth`. |
+| `widgetSettings.height` | `auto` | The height of the widget itself. Can be any CSS option for dimensions, e.g. `"100px"`. By default a widget is as high as its content. |
 | `monitors` | `[]` | In here all the monitors which you want to display are listed and configured. By default the array is empty and you need to add your monitors.
 | `monitors[XY].id` | | Enter the ID of your monitor which should be displayed.
 | `monitors[XY].name` | | A Descriptive Name for your monitor.
@@ -108,6 +105,86 @@ To use this module, add the configuration to the modules array in `config/config
 | orange | Monitor is pending |
 | blue | Monitor is under maintenance |
 | gray | Monitor is unknown — it is paused, or no monitor matched your configured `id`/`monitorName` |
+
+These colors can be changed in `custom.css`, see below.
+
+## Styling with custom.css
+
+The appearance of the module is styled in MagicMirror's `css/custom.css` — colors, transparency, fonts, borders, spacing and the number of widget rows. Only the widget dimensions are config options, because they have to be known per instance.
+
+The colors and dimensions are CSS custom properties, so the common changes are one-liners:
+
+```css
+.MMM-AuthenticatedUptimeKuma {
+    /* Widgets */
+    --uptimekuma-tile-background: #FFFFFF;
+    --uptimekuma-tile-background-opacity: 1;   /* 0 = see-through background */
+    --uptimekuma-tile-opacity: 1;              /* 0 = see-through widget, text included */
+    --uptimekuma-tile-min-width: 200px;
+    --uptimekuma-tile-width: auto;
+    --uptimekuma-tile-height: auto;
+    --uptimekuma-title-color: black;
+    --uptimekuma-description-color: #666;
+
+    /* Status colors, used by both display types */
+    --uptimekuma-color-up: green;
+    --uptimekuma-color-down: red;
+    --uptimekuma-color-pending: orange;
+    --uptimekuma-color-maintenance: blue;
+    --uptimekuma-color-unknown: gray;
+}
+```
+
+### Transparency
+
+There are two ways to make a widget see-through. `--uptimekuma-tile-background-opacity` only fades the background and keeps the text fully readable, which is usually what you want on a mirror:
+
+```css
+.MMM-AuthenticatedUptimeKuma {
+    --uptimekuma-tile-background: white;
+    --uptimekuma-tile-background-opacity: 0.08;
+    --uptimekuma-tile-height: 90px;
+    --uptimekuma-title-color: white;
+    --uptimekuma-description-color: #999;
+}
+```
+
+`--uptimekuma-tile-opacity` fades the whole widget including its text. You can also set a transparent color directly, e.g. `--uptimekuma-tile-background: rgba(255, 255, 255, 0.1)`.
+
+> **Note:** `minWidth`, `width` and `height` from your `config.js` are applied to the widgets directly and therefore win over the matching custom property. Either leave them out of your config, or add `!important` to the declaration in `custom.css`.
+
+### Elements
+
+For anything the properties above do not cover, style the classes directly:
+
+| Selector | Element |
+|-----|-----|
+| `.widget-list-container` | The grid all widgets are placed in. Its `grid-template-rows: repeat(2, 1fr)` is what puts the widgets into two rows — change it to show more or fewer. |
+| `.monitor-widget` | A single widget. Its `::before` draws the background, so a background you set here sits on top of it. |
+| `.monitor-name` | The widget title. |
+| `.monitor-data` | The value, e.g. `99.98% (24h)`. Also carries the status class. |
+| `.monitor-data-name` | The description above the title, e.g. `Uptime (24h)`. |
+| `.circle-indicator` | The status circle of the list display. |
+| `.status-up`, `.status-down`, `.status-pending`, `.status-maintenance`, `.status-unknown` | Set on the status circle and on the value, so you can style a single status. |
+
+Always prefix your selectors with `.MMM-AuthenticatedUptimeKuma` so other modules keep their own styling:
+
+```css
+/* Three rows of widgets instead of two, in a monospace font */
+.MMM-AuthenticatedUptimeKuma .widget-list-container {
+    grid-template-rows: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.MMM-AuthenticatedUptimeKuma .monitor-data {
+    font-family: monospace;
+}
+
+/* Make a down monitor stand out */
+.MMM-AuthenticatedUptimeKuma .monitor-widget:has(.status-down)::before {
+    box-shadow: 0 0 8px red;
+}
+```
 
 ## Uptime Kuma versions
 
@@ -140,6 +217,20 @@ You can get your monitor ID by clicking on the Monitor on your Web-Instance and 
 ```
 https://your-url.com/dashboard/[ID]
 ```
+
+## Migrating the widget colors
+
+The `titleColor`, `backgroundColor` and `descriptionColor` options moved out of `config.js` into `custom.css`. Remove them from your config — the module logs a warning while they are still there — and put them into `css/custom.css` instead:
+
+```css
+.MMM-AuthenticatedUptimeKuma {
+    --uptimekuma-title-color: black;
+    --uptimekuma-tile-background: #FFFFFF;
+    --uptimekuma-description-color: #666;
+}
+```
+
+`minWidth` and `height` stay where they are.
 
 ## Migrating from the socket token
 
