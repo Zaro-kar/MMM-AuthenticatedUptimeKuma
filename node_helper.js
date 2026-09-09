@@ -1,135 +1,99 @@
-var NodeHelper = require("node_helper");
-const { io } = require("socket.io-client");
+const NodeHelper = require("node_helper");
+const { UptimeKumaApi } = require("./uptime-kuma-api");
 
-class UptimeKuma extends require("events").EventEmitter {
-    constructor(url, token) {
-        super();
-        this.url = url;
-        this.token = token;
-        this.socket = null;
-    }
-
-    // Connect to the Uptime Kuma server
-    connect() {
-        if (this.isConnected()) {
-            this.disconnect();
-        }
-
-        this.socket = io(this.url, {
-            reconnection: true,
-        });
-
-        // Event listeners for the uptime kuma socket
-
-        this.socket.on("connect", () => {
-            this.emit("connected");
-            this.authenticate();
-        });
-
-        this.socket.on("disconnect", (reason) => {
-            this.emit("disconnect", `Disconnected: ${reason}`);
-        });
-
-        this.socket.on("heartbeat", (heartbeat) => {
-            this.emit("heartbeat", heartbeat);
-        });
-
-        this.socket.on("heartbeatList", (monitorID, heartbeatList) => {
-            const intMonitorID = parseInt(monitorID);
-            this.emit("heartbeatList", {
-                monitorID: intMonitorID,
-                heartbeatList,
-            });
-        });
-
-        this.socket.on("monitorList", (monitorslist) => {
-            this.emit("monitorList", monitorslist);
-        });
-
-        this.socket.on("uptime", (monitorID, period, percent) => {
-            const intMonitorID = parseInt(monitorID);
-            this.emit("uptime", {
-                monitorID: intMonitorID,
-                period,
-                percent,
-            });
-        });
-
-        this.socket.on("avgPing", (monitorID, avgPing) => {
-            const intMonitorID = parseInt(monitorID);
-            this.emit("avgPing", {
-                monitorID: intMonitorID,
-                avgPing,
-            });
-        });
-
-        // DEBUG: fetch all importent events
-        // this.socket.onAny((eventName) => {
-        //   console.log(eventName);
-        // });
-    }
-
-    authenticate() {
-        this.socket.emit("loginByToken", this.token, (response) => {
-            if (response.ok) {
-                this.emit("authenticated");
-            } else {
-                this.emit("error", response.msg || "Authentication failed");
-            }
-        });
-    }
-
-    isConnected() {
-        return !!this.socket?.connected;
-    }
-
-    disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
-    }
-}
+// Uptime Kuma recalculates /metrics on every scrape, so don't hammer it.
+const MIN_UPDATE_INTERVAL = 10000;
+const DEFAULT_UPDATE_INTERVAL = 60000;
 
 module.exports = NodeHelper.create({
     start: function () {
         console.log("Starting MMM-AuthenticatedUptimeKuma node_helper");
-        this.uptimeKuma = null;
+        this.instances = new Map();
+    },
+
+    stop: function () {
+        for (const identifier of [ ...this.instances.keys() ]) {
+            this.teardown(identifier);
+        }
     },
 
     socketNotificationReceived: function (notification, payload) {
-        /*
-        // DEBUG: log function for the module
-        if (notification === "log") {
-            console.log(payload);
+        if (notification === "CONFIG") {
+            this.configure(payload.identifier, payload.config);
         }
-        */
+    },
 
-        if (notification === "START_CONNECTION") {
-            const { url, token } = payload;
-            this.uptimeKuma = new UptimeKuma(url, token);
-            this.uptimeKuma.connect();
-
-            // Set up listeners for emitted data
-            this.uptimeKuma.on("monitorList", (monitorList) => {
-                this.sendSocketNotification("MONITOR_LIST", monitorList);
-            });
-
-            this.uptimeKuma.on("heartbeat", (heartbeat) => {
-                this.sendSocketNotification("HEARTBEAT", heartbeat);
-            });
-
-            this.uptimeKuma.on("uptime", (uptimeData) => {
-                this.sendSocketNotification("UPTIME", uptimeData);
-            });
-
-            this.uptimeKuma.on("avgPing", (avgPingData) => {
-                this.sendSocketNotification("AVG_PING", avgPingData);
-            });
-
-            this.uptimeKuma.on("heartbeatList", (heartbeatListData) => {
-                this.sendSocketNotification("HEARTBEAT_LIST", heartbeatListData);
-            });
+    // Stop polling for a module instance, e.g. before reconfiguring it after a
+    // browser reload.
+    teardown: function (identifier) {
+        const instance = this.instances.get(identifier);
+        if (!instance) {
+            return;
         }
-    }
+
+        clearInterval(instance.timer);
+        this.instances.delete(identifier);
+    },
+
+    configure: function (identifier, config) {
+        this.teardown(identifier);
+
+        let api;
+        try {
+            api = new UptimeKumaApi(config);
+        } catch (error) {
+            this.reportError(identifier, error);
+            return;
+        }
+
+        const interval = Math.max(Number(config.updateInterval) || DEFAULT_UPDATE_INTERVAL, MIN_UPDATE_INTERVAL);
+        const instance = { api, fetching: false, timer: null };
+
+        instance.timer = setInterval(() => {
+            this.poll(identifier);
+        }, interval);
+
+        this.instances.set(identifier, instance);
+        this.poll(identifier);
+    },
+
+    poll: async function (identifier) {
+        const instance = this.instances.get(identifier);
+
+        // Skip if the previous scrape is still running, e.g. on a slow instance.
+        if (!instance || instance.fetching) {
+            return;
+        }
+
+        instance.fetching = true;
+
+        try {
+            const result = await instance.api.fetchMonitors();
+
+            // The instance may have been torn down while the request was open.
+            if (this.instances.get(identifier) !== instance) {
+                return;
+            }
+
+            this.sendSocketNotification("MONITOR_DATA", {
+                identifier,
+                monitors: result.monitors,
+                hasMonitorIds: result.hasMonitorIds,
+                hasUptime: result.hasUptime,
+            });
+        } catch (error) {
+            if (this.instances.get(identifier) === instance) {
+                this.reportError(identifier, error);
+            }
+        } finally {
+            instance.fetching = false;
+        }
+    },
+
+    reportError: function (identifier, error) {
+        const message = error.message || String(error);
+
+        console.error(`MMM-AuthenticatedUptimeKuma: ${message}`);
+        this.sendSocketNotification("FETCH_ERROR", { identifier, message });
+    },
 });
