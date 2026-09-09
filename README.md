@@ -116,6 +116,9 @@ The colors and dimensions are CSS custom properties, so the common changes are o
 
 ```css
 .MMM-AuthenticatedUptimeKuma {
+    /* Size of the whole module */
+    --uptimekuma-scale: 1;
+
     /* Widgets */
     --uptimekuma-tile-background: #FFFFFF;
     --uptimekuma-tile-background-opacity: 1;   /* 0 = see-through background */
@@ -134,6 +137,20 @@ The colors and dimensions are CSS custom properties, so the common changes are o
     --uptimekuma-color-unknown: gray;
 }
 ```
+
+### Size
+
+`--uptimekuma-scale` shrinks or grows the whole module proportionally — text, padding, corners, status circles and the space the module takes up in its region:
+
+```css
+.MMM-AuthenticatedUptimeKuma {
+    --uptimekuma-scale: 0.6;   /* 60% of the default size */
+}
+```
+
+This is the option you want if the widgets look too big. They have no size class of their own, so their text inherits MagicMirror's body font size, which is considerably larger than the `small` text of the list display. Values between `0.5` and `0.7` usually match the rest of a mirror.
+
+It scales everything at once. To change only the text, set `font-size` on the individual elements instead, see [Elements](#elements) below.
 
 ### Transparency
 

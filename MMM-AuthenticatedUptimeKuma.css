@@ -2,6 +2,12 @@
    MagicMirror's css/custom.css without editing this file. Settings put into
    config.js are written onto the element itself and win over custom.css. */
 .MMM-AuthenticatedUptimeKuma {
+    /* Scales the whole module proportionally, text included. Widgets inherit
+       MagicMirror's body font size, which is fairly large — 0.6 is a good
+       starting point if they dwarf the rest of your mirror. */
+    --uptimekuma-scale: 1;
+    zoom: var(--uptimekuma-scale);
+
     --uptimekuma-color-up: green;
     --uptimekuma-color-down: red;
     --uptimekuma-color-pending: orange;
